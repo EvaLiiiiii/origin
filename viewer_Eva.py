@@ -189,23 +189,19 @@ class HabitatSimInteractiveViewer(Application):
         ):
             self.navmesh_config_and_recompute()
 
-
         ####Add Stuff######
-        
         obj_templates_mgr = self.sim.get_object_template_manager()
         rigid_obj_mgr = self.sim.get_rigid_object_manager()
         sphere_template_id = obj_templates_mgr.load_configs("./data/test_assets/objects/sphere")[0]
         sphere_obj = rigid_obj_mgr.add_object_by_template_id(sphere_template_id)
-        point = self.sim.agents[0].get_state().position + [1.0, 0.0, 0.0]
-        # sample a near valid spot to the point
-        success = sample_object_state(self.sim, sphere_obj,point)
-        if success:
-            sphere_obj.motion_type = habitat_sim.physics.MotionType.STATIC
-        self.navmesh_config_and_recompute()
-
-
+        sphere_obj.translation = self.sim.agents[0].get_state().position + [1.0, 0.0, 0.0]
+        sphere_obj1 = rigid_obj_mgr.add_object_by_template_id(sphere_template_id)
+        sphere_obj1.translation = self.sim.agents[0].get_state().position + [0.0, 0.0, 0.0]
+        sphere_obj2 = rigid_obj_mgr.add_object_by_template_id(sphere_template_id)
+        sphere_obj2.translation = self.sim.agents[0].get_state().position + [0.0, 0.0, 0.0]
+        print(sphere_obj.translation,sphere_obj1.translation,sphere_obj2.translation)
+        print("agent position", self.sim.agents[0].get_state().position)
         ###########
-
 
         self.time_since_last_simulation = 0.0
         LoggingContext.reinitialize_from_env()
@@ -1113,69 +1109,7 @@ class Timer:
         Timer.prev_frame_duration = time.time() - Timer.prev_frame_time
         Timer.prev_frame_time = time.time()
 
-####
-# sample a random valid state for the object from the scene bounding box or navmesh
-def sample_object_state(
-    sim, obj,point, from_navmesh=True, maintain_object_up=True, max_tries=100, bb=None
-):
-    # check that the object is not STATIC
-    stage_attr_mgr = sim.get_stage_template_manager()
-    if obj.motion_type is habitat_sim.physics.MotionType.STATIC:
-        print("sample_object_state : Object is STATIC, aborting.")
-    if from_navmesh:
-        if not sim.pathfinder.is_loaded:
-            print("sample_object_state : No pathfinder, aborting.")
-            return False
-    elif not bb:
-        print(
-            "sample_object_state : from_navmesh not specified and no bounding box provided, aborting."
-        )
-        return False
-    tries = 0
-    valid_placement = False
-    # Note: following assumes sim was not reconfigured without close
-    scene_collision_margin = stage_attr_mgr.get_template_by_id(0).margin
-    while not valid_placement and tries < max_tries:
-        tries += 1
-        # initialize sample location to random point in scene bounding box
-        sample_location = np.array([0, 0, 0])
-        if from_navmesh:
-            # query random navigable point
-            sample_location = sim.pathfinder.get_random_navigable_point_near(point,radius = 0.5)
-        else:
-            sample_location = np.random.uniform(bb.min, bb.max)
-        # set the test state
-        obj.translation = sample_location
-        if maintain_object_up:
-            # random rotation only on the Y axis
-            y_rotation = mn.Quaternion.rotation(
-                mn.Rad(random.random() * 2 * math.pi), mn.Vector3(0, 1.0, 0)
-            )
-            obj.rotation = y_rotation * obj.rotation
-        else:
-            # unconstrained random rotation
-            obj.rotation = ut.random_quaternion()
 
-        # raise object such that lowest bounding box corner is above the navmesh sample point.
-        if from_navmesh:
-            obj_node = obj.root_scene_node
-            xform_bb = habitat_sim.geo.get_transformed_bb(
-                obj_node.cumulative_bb, obj_node.transformation
-            )
-            # also account for collision margin of the scene
-            obj.translation += mn.Vector3(
-                0, xform_bb.size_y() / 2.0 + scene_collision_margin, 0
-            )
-
-        # test for penetration with the environment
-        if not sim.contact_test(obj.object_id):
-            valid_placement = True
-
-    if not valid_placement:
-        return False
-    return True
-
-######
 if __name__ == "__main__":
     import argparse
 
